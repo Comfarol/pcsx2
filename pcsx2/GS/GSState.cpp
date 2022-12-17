@@ -332,29 +332,24 @@ GSVideoMode GSState::GetVideoMode()
 
 	switch (Colorburst)
 	{
-		case 0:
-			if (isinterlaced() && PLL_Divider == 22)
-				return GSVideoMode::HDTV_1080I;
-			else if (!isinterlaced() && PLL_Divider == 22)
-				return GSVideoMode::HDTV_720P;
-			else if (!isinterlaced() && PLL_Divider == 32)
-				return GSVideoMode::SDTV_480P; // TODO: 576P will also be reported as 480P, find some way to differeniate.
-			else
-				return GSVideoMode::VESA;
-		case 2:
-			return GSVideoMode::NTSC;
-		case 3:
-			return GSVideoMode::PAL;
-		default:
-			return GSVideoMode::Unknown;
+	case 0:
+		if (isinterlaced() && PLL_Divider == 22)
+			return GSVideoMode::HDTV_1080I;
+		else if (!isinterlaced() && PLL_Divider == 22)
+			return GSVideoMode::HDTV_720P;
+		else if (!isinterlaced() && PLL_Divider == 32)
+			return GSVideoMode::SDTV_480P; // TODO: 576P will also be reported as 480P, find some way to differeniate.
+		else
+			return GSVideoMode::VESA;
+	case 2:
+		return GSVideoMode::NTSC;
+	case 3:
+		return GSVideoMode::PAL;
+	default:
+		return GSVideoMode::Unknown;
 	}
 
 	__assume(0); // unreachable
-}
-
-bool GSState::IsAnalogue()
-{
-	return GetVideoMode() == GSVideoMode::NTSC || GetVideoMode() == GSVideoMode::PAL || GetVideoMode() == GSVideoMode::HDTV_1080I;
 }
 
 GSVector4i GSState::GetFrameMagnifiedRect(int i)
@@ -384,8 +379,8 @@ GSVector4i GSState::GetFrameMagnifiedRect(int i)
 	}
 	else
 	{
-		width = (DW / (VideoModeDividers[videomode].x + 1));
-		height = (DH / (VideoModeDividers[videomode].y + 1));
+		width = (DW / (PCRTCDisplays.VideoModeDividers[videomode].x + 1));
+		height = (DH / (PCRTCDisplays.VideoModeDividers[videomode].y + 1));
 	}
 
 	int res_multi = 1;
@@ -411,7 +406,7 @@ int GSState::GetDisplayHMagnification()
 
 	// If neither DISPLAY is enabled, fallback to resolution offset (should never happen)
 	const int videomode = static_cast<int>(GetVideoMode()) - 1;
-	return VideoModeDividers[videomode].x + 1;
+	return PCRTCDisplays.VideoModeDividers[videomode].x + 1;
 }
 
 GSVector4i GSState::GetDisplayRect(int i)
@@ -462,10 +457,10 @@ GSVector2i GSState::GetResolutionOffset(int i)
 
 	const auto& SMODE2 = m_regs->SMODE2;
 	const int res_multi = (SMODE2.INT + 1);
-	const GSVector4i offsets = !GSConfig.PCRTCOverscan ? VideoModeOffsets[videomode] : VideoModeOffsetsOverscan[videomode];
+	const GSVector4i offsets = !GSConfig.PCRTCOverscan ? PCRTCDisplays.VideoModeOffsets[videomode] : PCRTCDisplays.VideoModeOffsetsOverscan[videomode];
 
-	offset.x = (static_cast<int>(DISP.DX) - offsets.z) / (VideoModeDividers[videomode].x + 1);
-	offset.y = (static_cast<int>(DISP.DY) - (offsets.w * ((IsAnalogue() && res_multi) ? res_multi : 1))) / (VideoModeDividers[videomode].y + 1);
+	offset.x = (static_cast<int>(DISP.DX) - offsets.z) / (PCRTCDisplays.VideoModeDividers[videomode].x + 1);
+	offset.y = (static_cast<int>(DISP.DY) - (offsets.w * ((PCRTCDisplays.IsAnalogue() && res_multi) ? res_multi : 1))) / (PCRTCDisplays.VideoModeDividers[videomode].y + 1);
 
 	return offset;
 }
@@ -475,7 +470,7 @@ GSVector2i GSState::GetResolution()
 	const int videomode = static_cast<int>(GetVideoMode()) - 1;
 	const bool ignore_offset = !GSConfig.PCRTCOffsets;
 
-	const GSVector4i offsets = !GSConfig.PCRTCOverscan ? VideoModeOffsets[videomode] : VideoModeOffsetsOverscan[videomode];
+	const GSVector4i offsets = !GSConfig.PCRTCOverscan ? PCRTCDisplays.VideoModeOffsets[videomode] : PCRTCDisplays.VideoModeOffsetsOverscan[videomode];
 
 	GSVector2i resolution(offsets.x, offsets.y);
 
@@ -491,7 +486,7 @@ GSVector2i GSState::GetResolution()
 		// Some games (Mortal Kombat Armageddon) render the image at 834 pixels then shrink it to 624 pixels
 		// which does fit, but when we ignore offsets we go on framebuffer size and some other games
 		// such as Johnny Mosleys Mad Trix and Transformers render too much but design it to go off the screen.
-		int magnified_width = (VideoModeDividers[videomode].z + 1) / GetDisplayHMagnification();
+		int magnified_width = (PCRTCDisplays.VideoModeDividers[videomode].z + 1) / GetDisplayHMagnification();
 
 		// When viewing overscan allow up to the overscan size
 		if (GSConfig.PCRTCOverscan)

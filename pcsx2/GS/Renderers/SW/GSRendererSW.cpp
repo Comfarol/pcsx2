@@ -128,27 +128,18 @@ GSTexture* GSRendererSW::GetOutput(int i, int& y_offset)
 {
 	Sync(1);
 
-	const GSRegDISPFB& DISPFB = m_regs->DISP[i].DISPFB;
+	int index = i >= 0 ? i : 1;
+	GSPCRTCRegs::PCRTCDisplay& curFramebuffer = PCRTCDisplays.PCRTCDisplays[index];
+	GSVector2i framebufferSize = PCRTCDisplays.GetFramebufferSize(i);
+	int w = curFramebuffer.FBW * 64;
+	int h = framebufferSize.y;
 
-	int w = DISPFB.FBW * 64;
-
-	const int videomode = static_cast<int>(GetVideoMode()) - 1;
-	const int display_offset = GetResolutionOffset(i).y;
-	const GSVector4i offsets = !GSConfig.PCRTCOverscan ? VideoModeOffsets[videomode] : VideoModeOffsetsOverscan[videomode];
-	const int display_height = offsets.y * ((isinterlaced() && !m_regs->SMODE2.FFMD) ? 2 : 1);
-	int h = std::min(GetFramebufferHeight(), display_height);
-
-	// If there is a negative vertical offset on the picture, we need to read more.
-	if (display_offset < 0)
-	{
-		h += -display_offset;
-	}
-
-	if (g_gs_device->ResizeTarget(&m_texture[i], w, h))
+	if (g_gs_device->ResizeTarget(&m_texture[index], w, h))
 	{
 		constexpr int pitch = 1024 * 4;
-		const int off_x = DISPFB.DBX & 0x7ff;
-		const int off_y = DISPFB.DBY & 0x7ff;
+		// Should really be framebufferOffsets rather than framebufferRect but this might be compensated with anti-blur in some games.
+		const int off_x = curFramebuffer.framebufferRect.x & 0x7ff;
+		const int off_y = curFramebuffer.framebufferRect.y & 0x7ff;
 		const GSVector4i out_r(0, 0, w, h);
 		GSVector4i r(off_x, off_y, w + off_x, h + off_y);
 		GSVector4i rh(off_x, off_y, w + off_x, (h + off_y) & 0x7FF);
@@ -173,44 +164,44 @@ GSTexture* GSRendererSW::GetOutput(int i, int& y_offset)
 			w_wrap = true;
 		}
 
-		const GSLocalMemory::psm_t& psm = GSLocalMemory::m_psm[DISPFB.PSM];
+		const GSLocalMemory::psm_t& psm = GSLocalMemory::m_psm[curFramebuffer.PSM];
 
 		// Top left rect
-		psm.rtx(m_mem, m_mem.GetOffset(DISPFB.Block(), DISPFB.FBW, DISPFB.PSM), r.ralign<Align_Outside>(psm.bs), m_output, pitch, m_env.TEXA);
+		psm.rtx(m_mem, m_mem.GetOffset(curFramebuffer.Block(), curFramebuffer.FBW, curFramebuffer.PSM), r.ralign<Align_Outside>(psm.bs), m_output, pitch, m_env.TEXA);
 
 		int top = (h_wrap) ? ((r.bottom - r.top) * pitch) : 0;
-		int left = (w_wrap) ? (r.right - r.left) * (GSLocalMemory::m_psm[DISPFB.PSM].bpp / 8) : 0;
+		int left = (w_wrap) ? (r.right - r.left) * (GSLocalMemory::m_psm[curFramebuffer.PSM].bpp / 8) : 0;
 
 		// The following only happen if the DBX/DBY wrap around at 2048.
 
 		// Top right rect
 		if (w_wrap)
-			psm.rtx(m_mem, m_mem.GetOffset(DISPFB.Block(), DISPFB.FBW, DISPFB.PSM), rw.ralign<Align_Outside>(psm.bs), &m_output[left], pitch, m_env.TEXA);
+			psm.rtx(m_mem, m_mem.GetOffset(curFramebuffer.Block(), curFramebuffer.FBW, curFramebuffer.PSM), rw.ralign<Align_Outside>(psm.bs), &m_output[left], pitch, m_env.TEXA);
 
 		// Bottom left rect
 		if (h_wrap)
-			psm.rtx(m_mem, m_mem.GetOffset(DISPFB.Block(), DISPFB.FBW, DISPFB.PSM), rh.ralign<Align_Outside>(psm.bs), &m_output[top], pitch, m_env.TEXA);
+			psm.rtx(m_mem, m_mem.GetOffset(curFramebuffer.Block(), curFramebuffer.FBW, curFramebuffer.PSM), rh.ralign<Align_Outside>(psm.bs), &m_output[top], pitch, m_env.TEXA);
 
 		// Bottom right rect
 		if (h_wrap && w_wrap)
 		{
 			// Needs also rw with the start/end height of rh, fills in the bottom right rect which will be missing if both overflow.
 			const GSVector4i rwh(rw.left, rh.top, rw.right, rh.bottom);
-			psm.rtx(m_mem, m_mem.GetOffset(DISPFB.Block(), DISPFB.FBW, DISPFB.PSM), rwh.ralign<Align_Outside>(psm.bs), &m_output[top + left], pitch, m_env.TEXA);
+			psm.rtx(m_mem, m_mem.GetOffset(curFramebuffer.Block(), curFramebuffer.FBW, curFramebuffer.PSM), rwh.ralign<Align_Outside>(psm.bs), &m_output[top + left], pitch, m_env.TEXA);
 		}
 
-		m_texture[i]->Update(out_r, m_output, pitch);
+		m_texture[index]->Update(out_r, m_output, pitch);
 
 		if (s_dump)
 		{
 			if (s_savef && s_n >= s_saven)
 			{
-				m_texture[i]->Save(m_dump_root + StringUtil::StdStringFromFormat("%05d_f%lld_fr%d_%05x_%s.bmp", s_n, g_perfmon.GetFrame(), i, (int)DISPFB.Block(), psm_str(DISPFB.PSM)));
+				m_texture[i]->Save(m_dump_root + StringUtil::StdStringFromFormat("%05d_f%lld_fr%d_%05x_%s.bmp", s_n, g_perfmon.GetFrame(), i, (int)curFramebuffer.Block(), psm_str(curFramebuffer.PSM)));
 			}
 		}
 	}
 
-	return m_texture[i];
+	return m_texture[index];
 }
 
 GSTexture* GSRendererSW::GetFeedbackOutput()

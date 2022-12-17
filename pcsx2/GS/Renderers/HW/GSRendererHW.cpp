@@ -57,8 +57,8 @@ GSVector2i GSRendererHW::GetOutputSize(int real_h)
 	if (!GSConfig.PCRTCOffsets)
 	{
 		const int videomode = static_cast<int>(GetVideoMode()) - 1;
-		const int display_width = (VideoModeDividers[videomode].z + 1) / GetDisplayHMagnification();
-		const GSVector4i offsets = !GSConfig.PCRTCOverscan ? VideoModeOffsets[videomode] : VideoModeOffsetsOverscan[videomode];
+		const int display_width = (PCRTCDisplays.VideoModeDividers[videomode].z + 1) / GetDisplayHMagnification();
+		const GSVector4i offsets = !GSConfig.PCRTCOverscan ? PCRTCDisplays.VideoModeOffsets[videomode] : PCRTCDisplays.VideoModeOffsetsOverscan[videomode];
 		int display_height = offsets.y;
 
 		if (isinterlaced() && !m_regs->SMODE2.FFMD)
@@ -238,7 +238,7 @@ GSTexture* GSRendererHW::GetOutput(int i, int& y_offset)
 	TEX0.PSM = DISPFB.PSM;
 
 	const int videomode = static_cast<int>(GetVideoMode()) - 1;
-	const GSVector4i offsets = VideoModeOffsets[videomode];
+	const GSVector4i offsets = PCRTCDisplays.VideoModeOffsets[videomode];
 
 	const int fb_width = std::min<int>(std::min<int>(GetFramebufferWidth(), DISPFB.FBW * 64) + (int)DISPFB.DBX, 2048);
 	const int display_height = offsets.y * ((isinterlaced() && !m_regs->SMODE2.FFMD) ? 2 : 1);
