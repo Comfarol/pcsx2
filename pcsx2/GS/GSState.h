@@ -484,14 +484,14 @@ public:
 				if (combined_rect.z >= 2048)
 				{
 					int high_x = (PCRTCDisplays[0].framebufferRect.x > PCRTCDisplays[1].framebufferRect.x) ? PCRTCDisplays[0].framebufferRect.x : PCRTCDisplays[1].framebufferRect.x;
-					combined_rect.z -= high_x;
+					combined_rect.z -= GSConfig.UseHardwareRenderer() ? 2048 : high_x;
 					combined_rect.x = 0;
 				}
 
 				if (combined_rect.w >= 2048)
 				{
 					int high_y = (PCRTCDisplays[0].framebufferRect.y > PCRTCDisplays[1].framebufferRect.y) ? PCRTCDisplays[0].framebufferRect.y : PCRTCDisplays[1].framebufferRect.y;
-					combined_rect.w -= high_y;
+					combined_rect.w -= GSConfig.UseHardwareRenderer() ? 2048 : high_y;
 					combined_rect.y = 0;
 				}
 				return GSVector2i(combined_rect.z, combined_rect.w);
@@ -502,13 +502,13 @@ public:
 
 				if (out_rect.z >= 2048)
 				{
-					out_rect.z -= out_rect.x;
+					out_rect.z -= GSConfig.UseHardwareRenderer() ? 2048 : out_rect.x;
 					out_rect.x = 0;
 				}
 
 				if (out_rect.w >= 2048)
 				{
-					out_rect.w -= out_rect.y;
+					out_rect.w -= GSConfig.UseHardwareRenderer() ? 2048 : out_rect.y;
 					out_rect.y = 0;
 				}
 				return GSVector2i(out_rect.z, out_rect.w);
@@ -592,18 +592,34 @@ public:
 		// Used in software mode to align the buffer when reading. Offset is accounted for (block aligned) by GetOutput.
 		void RemoveFramebufferOffset(int display)
 		{
-			
 			if (display >= 0)
 			{
-				const GSLocalMemory::psm_t& psm = GSLocalMemory::m_psm[PCRTCDisplays[display].PSM];
+				// Hardware needs nothing but handling for wrapped framebuffers.
+				if (GSConfig.UseHardwareRenderer())
+				{
+					if (PCRTCDisplays[display].framebufferRect.z >= 2048)
+					{
+						PCRTCDisplays[display].framebufferRect.x = 0;
+						PCRTCDisplays[display].framebufferRect.z -= 2048;
+					}
+					if (PCRTCDisplays[display].framebufferRect.w >= 2048)
+					{
+						PCRTCDisplays[display].framebufferRect.y = 0;
+						PCRTCDisplays[display].framebufferRect.w -= 2048;
+					}
+				}
+				else
+				{
+					const GSLocalMemory::psm_t& psm = GSLocalMemory::m_psm[PCRTCDisplays[display].PSM];
 
-				GSVector4i r = PCRTCDisplays[display].framebufferRect;
-				r = r.ralign<Align_Outside>(psm.bs);
+					GSVector4i r = PCRTCDisplays[display].framebufferRect;
+					r = r.ralign<Align_Outside>(psm.bs);
 
-				PCRTCDisplays[display].framebufferRect.z -= r.x;
-				PCRTCDisplays[display].framebufferRect.w -= r.y;
-				PCRTCDisplays[display].framebufferRect.x -= r.x;
-				PCRTCDisplays[display].framebufferRect.y -= r.y;
+					PCRTCDisplays[display].framebufferRect.z -= r.x;
+					PCRTCDisplays[display].framebufferRect.w -= r.y;
+					PCRTCDisplays[display].framebufferRect.x -= r.x;
+					PCRTCDisplays[display].framebufferRect.y -= r.y;
+				}
 			}
 			else
 			{

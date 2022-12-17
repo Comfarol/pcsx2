@@ -164,6 +164,7 @@ bool GSRenderer::Merge(int field)
 		if (!curCircuit.enabled || !tex[i])
 			continue;
 
+		float interlace_offset = 0.0f;
 		GSVector4 scale = GSVector4(tex[i]->GetScale()).xyxy();
 
 		// dst is the final destination rect with offset on the screen.
@@ -181,7 +182,15 @@ bool GSRenderer::Merge(int field)
 	//		if (GetUpscaleMultiplier() > 1.0f)
 	//			interlace_offset += ((((tex[1] ? tex[1]->GetScale().y : tex[0]->GetScale().y) + 0.5f) * 0.5f) - 1.0f) * static_cast<float>(field ^ field2);
 			//offset = 1.0f;
+			if (GetUpscaleMultiplier() > 1.0f)
+			{
+				interlace_offset += ((tex[1] ? tex[1]->GetScale().y : tex[0]->GetScale().y)) * static_cast<float>(field ^ field2);
+				//offset = 1.0f;
+			}
 		}
+		// Restore manually offset "interlace" lines
+		dst[i] += GSVector4(0.0f, interlace_offset, 0.0f, interlace_offset);
+
 		if (!m_regs->SMODE2.FFMD && !GSConfig.DisableInterlaceOffset && GSConfig.InterlaceMode != GSInterlaceMode::Off)
 		{
 			// We do half because FFMD is a half sized framebuffer, then we offset by 1 in the shader for the actual interlace

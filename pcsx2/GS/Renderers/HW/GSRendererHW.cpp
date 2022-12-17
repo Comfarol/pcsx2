@@ -229,10 +229,10 @@ void GSRendererHW::VSync(u32 field, bool registers_written)
 
 GSTexture* GSRendererHW::GetOutput(int i, int& y_offset)
 {
-	const GSRegDISPFB& DISPFB = m_regs->DISP[i].DISPFB;
+	//const GSRegDISPFB& DISPFB = m_regs->DISP[i].DISPFB;
 
 	GIFRegTEX0 TEX0 = {};
-
+	/*
 	TEX0.TBP0 = DISPFB.Block();
 	TEX0.TBW = DISPFB.FBW;
 	TEX0.PSM = DISPFB.PSM;
@@ -249,20 +249,32 @@ GSTexture* GSRendererHW::GetOutput(int i, int& y_offset)
 	{
 		fb_height += -display_offset;
 	}
+	*/
+	int index = i >= 0 ? i : 1;
+	GSPCRTCRegs::PCRTCDisplay& curFramebuffer = PCRTCDisplays.PCRTCDisplays[index];
+	GSVector2i framebufferSize = PCRTCDisplays.GetFramebufferSize(i);
+	const int fb_width = framebufferSize.x;
+	const int fb_height = framebufferSize.y;
+
+	PCRTCDisplays.RemoveFramebufferOffset(i);;
 	// TRACE(_T("[%d] GetOutput %d %05x (%d)\n"), (int)m_perfmon.GetFrame(), i, (int)TEX0.TBP0, (int)TEX0.PSM);
 
 	GSTexture* t = nullptr;
+
+	TEX0.TBP0 = curFramebuffer.Block();
+	TEX0.TBW = curFramebuffer.FBW;
+	TEX0.PSM = curFramebuffer.PSM;
 
 	if (GSTextureCache::Target* rt = m_tc->LookupDisplayTarget(TEX0, GetOutputSize(fb_height) * GSConfig.UpscaleMultiplier, fb_width, fb_height))
 	{
 		t = rt->m_texture;
 
 		const int delta = TEX0.TBP0 - rt->m_TEX0.TBP0;
-		if (delta > 0 && DISPFB.FBW != 0)
+		if (delta > 0 && curFramebuffer.FBW != 0)
 		{
 			const int pages = delta >> 5u;
-			int y_pages = pages / DISPFB.FBW;
-			y_offset = y_pages * GSLocalMemory::m_psm[DISPFB.PSM].pgs.y;
+			int y_pages = pages / curFramebuffer.FBW;
+			y_offset = y_pages * GSLocalMemory::m_psm[curFramebuffer.PSM].pgs.y;
 			GL_CACHE("Frame y offset %d pixels, unit %d", y_offset, i);
 		}
 
