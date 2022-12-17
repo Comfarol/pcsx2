@@ -423,12 +423,16 @@ public:
 			GSUtil::HasCompatibleBits(PCRTCDisplays[0].PSM, PCRTCDisplays[1].PSM);
 		}
 		
+		bool FrameWrap()
+		{
+			GSVector4i combined_rect = GSVector4i(PCRTCDisplays[0].framebufferRect.runion(PCRTCDisplays[1].framebufferRect));
+			return combined_rect.w >= 2048 || combined_rect.z >= 2048;
+		}
+
 		// If the start point of both frames match, we can do a single read
 		bool FrameRectMatch()
 		{
-			return PCRTCSameSrc &&
-				PCRTCDisplays[0].framebufferRect.x == PCRTCDisplays[1].framebufferRect.x &&
-				PCRTCDisplays[0].framebufferRect.y == PCRTCDisplays[1].framebufferRect.y;
+			return PCRTCSameSrc;
 		}
 
 		GSVector2i GetResolution()
@@ -459,17 +463,55 @@ public:
 			return resolution;
 		}
 
-		GSVector2i GetFramebufferSize(int disp)
+		GSVector4i GetFramebufferRect(int display)
 		{
-			if (disp == -1)
+			if (display == -1)
+			{
+				return GSVector4i(PCRTCDisplays[0].framebufferRect.runion(PCRTCDisplays[1].framebufferRect));
+			}
+			else
+			{
+				return PCRTCDisplays[display].framebufferRect;
+			}
+		}
+
+		GSVector2i GetFramebufferSize(int display)
+		{
+			if (display == -1)
 			{
 				GSVector4i combined_rect = PCRTCDisplays[0].framebufferRect.runion(PCRTCDisplays[1].framebufferRect);
 
+				if (combined_rect.z >= 2048)
+				{
+					int high_x = (PCRTCDisplays[0].framebufferRect.x > PCRTCDisplays[1].framebufferRect.x) ? PCRTCDisplays[0].framebufferRect.x : PCRTCDisplays[1].framebufferRect.x;
+					combined_rect.z -= high_x;
+					combined_rect.x = 0;
+				}
+
+				if (combined_rect.w >= 2048)
+				{
+					int high_y = (PCRTCDisplays[0].framebufferRect.y > PCRTCDisplays[1].framebufferRect.y) ? PCRTCDisplays[0].framebufferRect.y : PCRTCDisplays[1].framebufferRect.y;
+					combined_rect.w -= high_y;
+					combined_rect.y = 0;
+				}
 				return GSVector2i(combined_rect.z, combined_rect.w);
 			}
 			else
 			{
-				return GSVector2i(PCRTCDisplays[disp].framebufferRect.z, PCRTCDisplays[disp].framebufferRect.w);
+				GSVector4i out_rect = PCRTCDisplays[display].framebufferRect;
+
+				if (out_rect.z >= 2048)
+				{
+					out_rect.z -= out_rect.x;
+					out_rect.x = 0;
+				}
+
+				if (out_rect.w >= 2048)
+				{
+					out_rect.w -= out_rect.y;
+					out_rect.y = 0;
+				}
+				return GSVector2i(out_rect.z, out_rect.w);
 			}
 		}
 
@@ -547,6 +589,40 @@ public:
 			PCRTCDisplays[1].framebufferRect.w += PCRTCDisplays[1].framebufferOffsets.y;
 		}
 
+		// Used in software mode to align the buffer when reading. Offset is accounted for (block aligned) by GetOutput.
+		void RemoveFramebufferOffset(int display)
+		{
+			
+			if (display >= 0)
+			{
+				const GSLocalMemory::psm_t& psm = GSLocalMemory::m_psm[PCRTCDisplays[display].PSM];
+
+				GSVector4i r = PCRTCDisplays[display].framebufferRect;
+				r = r.ralign<Align_Outside>(psm.bs);
+
+				PCRTCDisplays[display].framebufferRect.z -= r.x;
+				PCRTCDisplays[display].framebufferRect.w -= r.y;
+				PCRTCDisplays[display].framebufferRect.x -= r.x;
+				PCRTCDisplays[display].framebufferRect.y -= r.y;
+			}
+			else
+			{
+				const GSLocalMemory::psm_t& psm = GSLocalMemory::m_psm[PCRTCDisplays[1].PSM];
+
+				GSVector4i r = PCRTCDisplays[0].framebufferRect.runion(PCRTCDisplays[1].framebufferRect);
+				r = r.ralign<Align_Outside>(psm.bs);
+
+				PCRTCDisplays[0].framebufferRect.x -= r.x;
+				PCRTCDisplays[0].framebufferRect.y -= r.y;
+				PCRTCDisplays[0].framebufferRect.z -= r.x;
+				PCRTCDisplays[0].framebufferRect.w -= r.y;
+				PCRTCDisplays[1].framebufferRect.x -= r.x;
+				PCRTCDisplays[1].framebufferRect.y -= r.y;
+				PCRTCDisplays[1].framebufferRect.z -= r.x;
+				PCRTCDisplays[1].framebufferRect.w -= r.y;
+			}
+		}
+
 		// If the two displays are offset from each other, move them to the correct offsets.
 		// If using screen offsets, calculate the positions here.
 		void CalculateDisplayOffset()
@@ -562,7 +638,7 @@ public:
 					// Should this be MAGV/H in the DISPLAY register rather than the "default" magnification?
 					int offset = ((static_cast<int>(PCRTCDisplays[i].displayOffset.y) - (offsets.w * (interlaced + 1))) / (VideoModeDividers[videomode].y + 1));
 
-					if (abs(offset) >= 4 || !GSConfig.PCRTCAntiBlur)
+					if (offset > 4)
 						continue;
 
 					int_off[i] = offset & 1;
@@ -581,7 +657,7 @@ public:
 					GSVector2i zeroDisplay = NearestToZeroOffset();
 					GSVector2i offset;
 
-					offset.x = PCRTCDisplays[1 - zeroDisplay.x].displayOffset.x - PCRTCDisplays[zeroDisplay.x].displayOffset.x;
+					offset.x = (PCRTCDisplays[1 - zeroDisplay.x].displayOffset.x - PCRTCDisplays[zeroDisplay.x].displayOffset.x) / (VideoModeDividers[videomode].x + 1);
 					offset.y = (PCRTCDisplays[1 - zeroDisplay.y].displayOffset.y - PCRTCDisplays[zeroDisplay.y].displayOffset.y) / (VideoModeDividers[videomode].y + 1);
 
 					if (offset.x >= 4 || !GSConfig.PCRTCAntiBlur)
@@ -603,7 +679,7 @@ public:
 				// Ignore the lowest bit, we've already accounted for this
 				int vOffset = ((static_cast<int>(baseOffset.y) - (offsets.w * (interlaced + 1))) / (VideoModeDividers[videomode].y + 1));
 
-				if(abs(vOffset) >= 4 || !GSConfig.PCRTCAntiBlur)
+				if(vOffset <= 4)
 				{
 					PCRTCDisplays[0].displayRect.y += vOffset - int_off[0];
 					PCRTCDisplays[0].displayRect.w += vOffset - int_off[0];

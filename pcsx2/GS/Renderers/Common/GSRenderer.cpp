@@ -119,7 +119,7 @@ bool GSRenderer::Merge(int field)
 	PCRTCDisplays.CheckSameSource();
 
 	// Only need to check the right/bottom on software renderer, hardware always gets the full texture then cuts a bit out later.
-	if (PCRTCDisplays.PCRTCSameSrc && (PCRTCDisplays.FrameRectMatch()))
+	if (PCRTCDisplays.PCRTCSameSrc && PCRTCDisplays.FrameRectMatch() && !PCRTCDisplays.FrameWrap())
 	{
 		tex[0] = GetOutput(-1, y_offset[0]);
 		tex[1] = tex[0]; // saves one texture fetch
@@ -176,6 +176,13 @@ bool GSRenderer::Merge(int field)
 		src_out_rect[i] = (GSVector4(curCircuit.finalDisplayRect) * scale) / GSVector4(tex[i]->GetSize()).xyxy();
 
 		if (m_regs->SMODE2.FFMD && !is_bob && !GSConfig.DisableInterlaceOffset && GSConfig.InterlaceMode != GSInterlaceMode::Off)
+		{
+			// We do half because FFMD is a half sized framebuffer, then we offset by 1 in the shader for the actual interlace
+	//		if (GetUpscaleMultiplier() > 1.0f)
+	//			interlace_offset += ((((tex[1] ? tex[1]->GetScale().y : tex[0]->GetScale().y) + 0.5f) * 0.5f) - 1.0f) * static_cast<float>(field ^ field2);
+			//offset = 1.0f;
+		}
+		if (!m_regs->SMODE2.FFMD && !GSConfig.DisableInterlaceOffset && GSConfig.InterlaceMode != GSInterlaceMode::Off)
 		{
 			// We do half because FFMD is a half sized framebuffer, then we offset by 1 in the shader for the actual interlace
 	//		if (GetUpscaleMultiplier() > 1.0f)

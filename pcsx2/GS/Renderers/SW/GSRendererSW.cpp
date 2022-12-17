@@ -131,15 +131,17 @@ GSTexture* GSRendererSW::GetOutput(int i, int& y_offset)
 	int index = i >= 0 ? i : 1;
 	GSPCRTCRegs::PCRTCDisplay& curFramebuffer = PCRTCDisplays.PCRTCDisplays[index];
 	GSVector2i framebufferSize = PCRTCDisplays.GetFramebufferSize(i);
+	GSVector4i framebufferRect = PCRTCDisplays.GetFramebufferRect(i);
 	int w = curFramebuffer.FBW * 64;
 	int h = framebufferSize.y;
 
 	if (g_gs_device->ResizeTarget(&m_texture[index], w, h))
 	{
+		const GSLocalMemory::psm_t& psm = GSLocalMemory::m_psm[curFramebuffer.PSM];
 		constexpr int pitch = 1024 * 4;
 		// Should really be framebufferOffsets rather than framebufferRect but this might be compensated with anti-blur in some games.
-		const int off_x = curFramebuffer.framebufferRect.x & 0x7ff;
-		const int off_y = curFramebuffer.framebufferRect.y & 0x7ff;
+		const int off_x = (framebufferRect.x & 0x7ff) & ~(psm.bs.x-1);
+		const int off_y = (framebufferRect.y & 0x7ff) & ~(psm.bs.y-1);
 		const GSVector4i out_r(0, 0, w, h);
 		GSVector4i r(off_x, off_y, w + off_x, h + off_y);
 		GSVector4i rh(off_x, off_y, w + off_x, (h + off_y) & 0x7FF);
@@ -147,6 +149,7 @@ GSTexture* GSRendererSW::GetOutput(int i, int& y_offset)
 		bool h_wrap = false;
 		bool w_wrap = false;
 
+		PCRTCDisplays.RemoveFramebufferOffset(i);
 		// Need to read it in 2 parts, since you can't do a split rect.
 		if (r.bottom >= 2048)
 		{
@@ -163,8 +166,6 @@ GSTexture* GSRendererSW::GetOutput(int i, int& y_offset)
 			rw.left = 0;
 			w_wrap = true;
 		}
-
-		const GSLocalMemory::psm_t& psm = GSLocalMemory::m_psm[curFramebuffer.PSM];
 
 		// Top left rect
 		psm.rtx(m_mem, m_mem.GetOffset(curFramebuffer.Block(), curFramebuffer.FBW, curFramebuffer.PSM), r.ralign<Align_Outside>(psm.bs), m_output, pitch, m_env.TEXA);
