@@ -365,6 +365,7 @@ public:
 		int interlaced;
 		int FFMD;
 		bool PCRTCSameSrc;
+		bool toggling_field;
 		PCRTCDisplay PCRTCDisplays[2];
 
 		bool IsAnalogue()
@@ -401,13 +402,14 @@ public:
 		}
 
 		// Enable each of the displays.
-		void EnableDisplays(GSRegPMODE pmode, GSRegSMODE2 smode2)
+		void EnableDisplays(GSRegPMODE pmode, GSRegSMODE2 smode2, bool smodetoggle)
 		{
 			PCRTCDisplays[0].enabled = pmode.EN1;
 			PCRTCDisplays[1].enabled = pmode.EN2;
 
 			interlaced = smode2.INT && IsAnalogue();
 			FFMD = smode2.FFMD;
+			toggling_field = smodetoggle && IsAnalogue();
 		}
 
 		void CheckSameSource()
@@ -457,8 +459,10 @@ public:
 			{
 				resolution = { offsets.x, offsets.y << interlaced };
 			}
+			
+			const bool is_interlaced_resolution = interlaced || (toggling_field && GSConfig.InterlaceMode != GSInterlaceMode::Off);
 
-			resolution.y = std::min(resolution.y, offsets.y << interlaced);
+			resolution.y = std::min(resolution.y, is_interlaced_resolution ? offsets.y << 1 : offsets.y);
 
 			return resolution;
 		}
@@ -522,6 +526,14 @@ public:
 			PCRTCDisplays[display].FBP = framebufferReg.FBP;
 			PCRTCDisplays[display].FBW = framebufferReg.FBW;
 			PCRTCDisplays[display].PSM = framebufferReg.PSM;
+
+			// Probably not really enabled but will cause a mess.
+			// Q-Ball Billiards enables both circuits but doesn't set one of them up.
+			if (PCRTCDisplays[display].FBW == 0 && displayReg.DW == 0 && displayReg.DH == 0 && displayReg.MAGH == 0)
+			{
+				PCRTCDisplays[display].enabled = false;
+				return;
+			}
 			PCRTCDisplays[display].magnification = GSVector2i(displayReg.MAGH + 1, displayReg.MAGV + 1);
 			const u32 DW = displayReg.DW + 1;
 			const u32 DH = displayReg.DH + 1;
@@ -529,10 +541,8 @@ public:
 			const int renderWidth = DW / PCRTCDisplays[display].magnification.x;
 			const int renderHeight = DH / PCRTCDisplays[display].magnification.y;
 
-			int displayWidth = renderWidth;
-			int displayHeight = renderHeight;
-			int finalDisplayWidth = displayWidth;
-			int finalDisplayHeight = displayHeight;
+			int finalDisplayWidth = renderWidth;
+			int finalDisplayHeight = renderHeight;
 			// When using screen offsets the screen gets squashed/resized in to the actual screen size.
 			if (GSConfig.PCRTCOffsets)
 			{
@@ -548,6 +558,13 @@ public:
 			PCRTCDisplays[display].framebufferRect.w = renderHeight >> (FFMD * interlaced); // Half height read if FFMD + INT enabled.
 			PCRTCDisplays[display].framebufferOffsets.x = framebufferReg.DBX;
 			PCRTCDisplays[display].framebufferOffsets.y = framebufferReg.DBY;
+
+			const bool is_interlaced_resolution = interlaced || (toggling_field && GSConfig.InterlaceMode != GSInterlaceMode::Off);
+
+			// If the interlace flag isn't set, but it's still interlacing, the height is likely reported wrong.
+			// Q-Ball Billiards.
+			if (is_interlaced_resolution && !interlaced)
+				finalDisplayHeight *= 2;
 
 			// Display size and offsets.
 			PCRTCDisplays[display].displayRect.x = 0;
@@ -728,18 +745,9 @@ public:
 	virtual ~GSState();
 
 	void ResetHandlers();
-
-	int GetFramebufferHeight();
-	int GetFramebufferWidth();
-	int GetDisplayHMagnification();
-	GSVector4i GetDisplayRect(int i = -1);
-	GSVector4i GetFrameMagnifiedRect(int i = -1);
-	GSVector2i GetResolutionOffset(int i = -1);
-	GSVector2i GetResolution();
-	GSVector4i GetFrameRect(int i = -1, bool ignore_off = false);
+	void ResetPCRTC();
 	GSVideoMode GetVideoMode();
 
-	bool IsEnabled(int i);
 	bool isinterlaced();
 	bool isReallyInterlaced();
 
