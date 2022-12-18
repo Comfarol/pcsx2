@@ -350,7 +350,6 @@ public:
 			GSVector2i displayOffset;
 			GSVector4i displayRect;
 			GSVector2i magnification;
-			GSVector4i finalDisplayRect;
 			GSVector2i prevFramebufferOffsets;
 			GSVector2i framebufferOffsets;
 			GSVector4i framebufferRect;
@@ -571,10 +570,6 @@ public:
 			PCRTCDisplays[display].displayRect.y = 0;
 			PCRTCDisplays[display].displayRect.z = finalDisplayWidth;
 			PCRTCDisplays[display].displayRect.w = finalDisplayHeight;
-			PCRTCDisplays[display].finalDisplayRect.x = 0;
-			PCRTCDisplays[display].finalDisplayRect.y = 0;
-			PCRTCDisplays[display].finalDisplayRect.z = finalDisplayWidth;
-			PCRTCDisplays[display].finalDisplayRect.w = finalDisplayHeight;
 			PCRTCDisplays[display].prevDisplayOffset = PCRTCDisplays[display].displayOffset;
 			PCRTCDisplays[display].displayOffset.x = displayReg.DX;
 			PCRTCDisplays[display].displayOffset.y = displayReg.DY;
@@ -658,13 +653,23 @@ public:
 
 		// If the two displays are offset from each other, move them to the correct offsets.
 		// If using screen offsets, calculate the positions here.
-		void CalculateDisplayOffset()
+		void CalculateDisplayOffset(bool scanmask)
 		{
 			// Offsets are generally ignored, the "hacky" way of doing the displays, but direct to framebuffers.
 			if (!GSConfig.PCRTCOffsets)
 			{
 				const GSVector4i offsets = !GSConfig.PCRTCOverscan ? VideoModeOffsets[videomode] : VideoModeOffsetsOverscan[videomode];
 				int int_off[2] = { 0, 0 };
+
+				int blurOffset = abs(PCRTCDisplays[1].displayOffset.y - PCRTCDisplays[0].displayOffset.y);
+				if (GSConfig.PCRTCAntiBlur && !scanmask && blurOffset < 4)
+				{
+					if (PCRTCDisplays[1].displayOffset.y > PCRTCDisplays[0].displayOffset.y)
+						PCRTCDisplays[1].displayOffset.y -= blurOffset;
+					else
+						PCRTCDisplays[0].displayOffset.y -= blurOffset;
+				}
+
 				// If there's a single pixel offset, account for it else it can throw interlacing out.
 				for (int i = 0; i < 2; i++)
 				{
@@ -678,8 +683,8 @@ public:
 					if (offset < 0)
 						int_off[i] = -int_off[i];
 
-					PCRTCDisplays[i].displayRect.y += offset;
-					PCRTCDisplays[i].displayRect.w += offset;
+					PCRTCDisplays[i].displayRect.y += int_off[i];
+					PCRTCDisplays[i].displayRect.w += int_off[i];
 				}
 
 				GSVector2i baseOffset = PCRTCDisplays[1].displayOffset;
@@ -700,8 +705,8 @@ public:
 					}
 					if (offset.y >= 4 || !GSConfig.PCRTCAntiBlur)
 					{
-						PCRTCDisplays[1 - zeroDisplay.y].displayRect.y += offset.y;
-						PCRTCDisplays[1 - zeroDisplay.y].displayRect.w += offset.y;
+						PCRTCDisplays[1 - zeroDisplay.y].displayRect.y += offset.y - int_off[1 - zeroDisplay.y];
+						PCRTCDisplays[1 - zeroDisplay.y].displayRect.w += offset.y - int_off[1 - zeroDisplay.y];
 					}
 
 					baseOffset = PCRTCDisplays[zeroDisplay.y].displayOffset;
@@ -712,7 +717,7 @@ public:
 				// Ignore the lowest bit, we've already accounted for this
 				int vOffset = ((static_cast<int>(baseOffset.y) - (offsets.w * (interlaced + 1))) / (VideoModeDividers[videomode].y + 1));
 
-				if(vOffset <= 4)
+				if(vOffset <= 4 && vOffset != 0)
 				{
 					PCRTCDisplays[0].displayRect.y += vOffset - int_off[0];
 					PCRTCDisplays[0].displayRect.w += vOffset - int_off[0];
@@ -724,6 +729,15 @@ public:
 			{
 				const GSVector4i offsets = !GSConfig.PCRTCOverscan ? VideoModeOffsets[videomode] : VideoModeOffsetsOverscan[videomode];
 				GSVector2i offset = { 0, 0 };
+
+				int blurOffset = abs(PCRTCDisplays[1].displayOffset.y - PCRTCDisplays[0].displayOffset.y);
+				if (GSConfig.PCRTCAntiBlur && !scanmask && blurOffset < 4)
+				{
+					if (PCRTCDisplays[1].displayOffset.y > PCRTCDisplays[0].displayOffset.y)
+						PCRTCDisplays[1].displayOffset.y -= blurOffset;
+					else
+						PCRTCDisplays[0].displayOffset.y -= blurOffset;
+				}
 
 				for (int i = 0; i < 2; i++)
 				{

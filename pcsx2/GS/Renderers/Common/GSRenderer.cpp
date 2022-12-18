@@ -108,7 +108,7 @@ bool GSRenderer::Merge(int field)
 
 	PCRTCDisplays.SetRects(0, m_regs->DISP[0].DISPLAY, m_regs->DISP[0].DISPFB);
 	PCRTCDisplays.SetRects(1, m_regs->DISP[1].DISPLAY, m_regs->DISP[1].DISPFB);
-	PCRTCDisplays.CalculateDisplayOffset();
+	PCRTCDisplays.CalculateDisplayOffset(m_scanmask_used);
 	PCRTCDisplays.CalculateFramebufferOffset();
 	PCRTCDisplays.CheckSameSource();
 
@@ -213,7 +213,7 @@ bool GSRenderer::Merge(int field)
 		return false;
 
 	if ((tex[0] == tex[1]) && (src_out_rect[0] == src_out_rect[1]).alltrue() && 
-		(PCRTCDisplays.PCRTCDisplays[0].finalDisplayRect == PCRTCDisplays.PCRTCDisplays[1].finalDisplayRect).alltrue() && 
+		(PCRTCDisplays.PCRTCDisplays[0].displayRect == PCRTCDisplays.PCRTCDisplays[1].displayRect).alltrue() &&
 		(PCRTCDisplays.PCRTCDisplays[0].framebufferRect == PCRTCDisplays.PCRTCDisplays[1].framebufferRect).alltrue() &&
 		!feedback_merge && !m_regs->PMODE.SLBG)
 	{
