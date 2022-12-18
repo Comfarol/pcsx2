@@ -113,7 +113,7 @@ bool GSRenderer::Merge(int field)
 	PCRTCDisplays.CheckSameSource();
 
 	// Only need to check the right/bottom on software renderer, hardware always gets the full texture then cuts a bit out later.
-	if (PCRTCDisplays.PCRTCSameSrc && PCRTCDisplays.FrameRectMatch() && !PCRTCDisplays.FrameWrap())
+	if (PCRTCDisplays.PCRTCSameSrc && PCRTCDisplays.FrameRectMatch() && !PCRTCDisplays.FrameWrap() && !feedback_merge)
 	{
 		tex[0] = GetOutput(-1, y_offset[0]);
 		tex[1] = tex[0]; // saves one texture fetch
@@ -171,6 +171,19 @@ bool GSRenderer::Merge(int field)
 				dst[i] += GSVector4(0.0f, interlace_offset, 0.0f, interlace_offset);
 			}
 		}
+	}
+
+	if (feedback_merge && tex[2])
+	{
+		GSVector4 scale = GSVector4(tex[2]->GetScale()).xyxy();
+		GSVector4i feedback_rect;
+
+		feedback_rect.left = m_regs->EXTBUF.WDX;
+		feedback_rect.right = feedback_rect.left + ((m_regs->EXTDATA.WW + 1) / ((m_regs->EXTDATA.SMPH - m_regs->DISP[m_regs->EXTBUF.FBIN].DISPLAY.MAGH) + 1));
+		feedback_rect.top = m_regs->EXTBUF.WDY;
+		feedback_rect.bottom = ((m_regs->EXTDATA.WH + 1) * (2 - m_regs->EXTBUF.WFFMD)) / ((m_regs->EXTDATA.SMPV - m_regs->DISP[m_regs->EXTBUF.FBIN].DISPLAY.MAGV) + 1);
+
+		dst[2] = GSVector4(scale * GSVector4(feedback_rect.rsize()));
 	}
 
 	GSVector2i resolution = PCRTCDisplays.GetResolution();
