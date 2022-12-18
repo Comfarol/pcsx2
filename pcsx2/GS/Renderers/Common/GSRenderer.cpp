@@ -141,8 +141,9 @@ bool GSRenderer::Merge(int field)
 	int field2 = 0;
 	int mode = 3;
 
+	bool scanmask_frame = m_scanmask_used && abs(PCRTCDisplays.PCRTCDisplays[0].displayRect.y - PCRTCDisplays.PCRTCDisplays[1].displayRect.y) != 1;
 	// FFMD (half frames) requires blend deinterlacing, so automatically use that. Same when SCANMSK is used but not blended in the merge circuit (Alpine Racer 3)
-	if (GSConfig.InterlaceMode != GSInterlaceMode::Automatic || (!m_regs->SMODE2.FFMD /*&& !scanmask_frame*/))
+	if (GSConfig.InterlaceMode != GSInterlaceMode::Automatic || (!m_regs->SMODE2.FFMD && !scanmask_frame))
 	{
 		field2 = ((static_cast<int>(GSConfig.InterlaceMode) - 2) & 1);
 		mode = ((static_cast<int>(GSConfig.InterlaceMode) - 2) >> 1);
@@ -162,15 +163,31 @@ bool GSRenderer::Merge(int field)
 
 		// src_gs_read is the size which we're really reading from GS memory.
 		src_gs_read[i] = ((GSVector4(curCircuit.framebufferRect) + GSVector4(0, y_offset[i], 0, y_offset[i])) * scale) / GSVector4(tex[i]->GetSize()).xyxy();
+		
+		float interlace_offset = 0.0f;
 
 		if (m_regs->SMODE2.FFMD && !is_bob && !GSConfig.DisableInterlaceOffset && GSConfig.InterlaceMode != GSInterlaceMode::Off)
 		{
 			if (GetUpscaleMultiplier() > 1.0f)
 			{
-				float interlace_offset = ((tex[1] ? tex[1]->GetScale().y : tex[0]->GetScale().y)) * static_cast<float>(field ^ field2);
-				dst[i] += GSVector4(0.0f, interlace_offset, 0.0f, interlace_offset);
+				interlace_offset = ((tex[1] ? tex[1]->GetScale().y : tex[0]->GetScale().y)) * static_cast<float>(field ^ field2);
 			}
 		}
+		// Scanmask frame offsets. It's gross, I'm sorry but it sucks.
+		if (m_scanmask_used)
+		{
+			int displayIntOffset = PCRTCDisplays.PCRTCDisplays[i].displayRect.y - PCRTCDisplays.PCRTCDisplays[1 - i].displayRect.y;
+			
+			if (displayIntOffset > 0)
+			{
+				displayIntOffset &= 1;
+				dst[i].y -= displayIntOffset * scale.y;
+				dst[i].w -= displayIntOffset * scale.y;
+				interlace_offset += displayIntOffset;
+			}
+		}
+
+		dst[i] += GSVector4(0.0f, interlace_offset, 0.0f, interlace_offset);
 	}
 
 	if (feedback_merge && tex[2])
